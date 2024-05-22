@@ -7,11 +7,11 @@
 | Khansa Adia Rahma      | 5027221071 |
 | Gilang Raya Kurnaiwan   | 5027221045 |
 
-#Topologi
+# Topologi
 Pertama buat Topologi sebagai berikut:
 ![alt text](pict/topologi.png)
 
-#Konfigurasi
+# Konfigurasi
 Edit network configuration sebagai berikut:
 - Arakis (DHCP Relay)
 ![alt text](pict/configArakis.png)
