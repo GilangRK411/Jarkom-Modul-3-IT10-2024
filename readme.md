@@ -1021,6 +1021,30 @@ tes juga dengan: ``ab -n 100 -c 10 -H "Authorization: Bearer $token" http://192.
 # No 18.
 Untuk memastikan ketiganya bekerja sama secara adil untuk mengatur atreides Channel maka implementasikan Proxy Bind pada Stilgar untuk mengaitkan IP dari Leto, Duncan, dan Jessica. (18)
 
+Pada node stilgar, tambahkan script berikut ke dalam ``/etc/nginx/sites-available/laravel``
+
+```
+upstream workers {
+    server 192.238.2.1:8001;
+	  server 192.238.2.2:8002;
+	  server 192.238.2.3:8003;
+}
+
+server {
+        listen 80;
+        server_name atreides.it10.com;
+
+        location / {
+        proxy_pass http://workers;
+        }
+}
+```
+cek dengan ``ln -s /etc/nginx/sites-available/laravel /etc/nginx/sites-enabled/laravel`` 
+
+Lakukan restart untuk nginx juga dengan ``service nginx restart``
+
+Tes dan cek lagi menggunakan: ``ab -n 100 -c 10 -p login.json -T application/json http://atreides.it10.com/api/auth/login``
+
 # No 19.
 Untuk meningkatkan performa dari Worker, coba implementasikan PHP-FPM pada Leto, Duncan, dan Jessica. Untuk testing kinerja naikkan 
 - pm.max_children
@@ -1029,5 +1053,88 @@ Untuk meningkatkan performa dari Worker, coba implementasikan PHP-FPM pada Leto,
 - pm.max_spare_servers
 sebanyak tiga percobaan dan lakukan testing sebanyak 100 request dengan 10 request/second kemudian berikan hasil analisisnya pada PDF.(19)
 
+1. Untuk melakukan percobaan yang pertama, tambahkan script berikut:
+
+```
+echo '[www]
+user = www-data
+group = www-data
+listen = /run/php/php8.0-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+php_admin_value[disable_functions] = exec,passthru,shell_exec,system
+php_admin_flag[allow_url_fopen] = off
+
+; 
+pm = dynamic
+pm.max_children = 15
+pm.start_servers = 12
+pm.min_spare_servers = 3
+pm.max_spare_servers = 13' > /etc/php/8.0/fpm/pool.d/www.conf
+```
+
+2. Selanjutnya, untuk melakukan percobaan yang kedua:
+```
+echo '[www]
+user = www-data
+group = www-data
+listen = /run/php/php8.0-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+php_admin_value[disable_functions] = exec,passthru,shell_exec,system
+php_admin_flag[allow_url_fopen] = off
+
+; 
+
+pm = dynamic
+pm.max_children = 25
+pm.start_servers = 22
+pm.min_spare_servers = 5
+pm.max_spare_servers = 23' > /etc/php/8.0/fpm/pool.d/www.conf
+```
+
+3. Lakukan percobaan untuk yang ketiga:
+```
+echo '[www]
+user = www-data
+group = www-data
+listen = /run/php/php8.0-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+php_admin_value[disable_functions] = exec,passthru,shell_exec,system
+php_admin_flag[allow_url_fopen] = off
+
+; 
+
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3' > /etc/php/8.0/fpm/pool.d/www.conf
+```
+
+Restart php dan nginx, Lalu test dengan: ``ab -n 100 -c 10 http://atreides.it10.com/``
 # No 20.
 Nampaknya hanya menggunakan PHP-FPM tidak cukup untuk meningkatkan performa dari worker maka implementasikan Least-Conn pada Stilgar. Untuk testing kinerja dari worker tersebut dilakukan sebanyak 100 request dengan 10 request/second. (20)
+
+pada node stilgar tambahkan script berikut pada ``/etc/nginx/sites-available/laravel``
+
+```
+upstream worker {
+    least_conn;
+    server 192.238.2.1:8001;
+	  server 192.238.2.2:8002;
+	  server 192.238.2.3:8003;
+}
+
+server {
+        listen 80;
+        server_name atreides.it10.com;
+
+        location / {
+        proxy_pass http://workers;
+        }
+}
+```
+
+Test dan cek dengan: ``ab -n 100 -c 10 http://atreides.it10.com/``
