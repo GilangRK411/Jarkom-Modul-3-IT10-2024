@@ -415,3 +415,619 @@ Nantinya akan muncul seperti berikut:
 
 # No 7.
 Aturlah agar Stilgar dari fremen dapat dapat bekerja sama dengan maksimal, lalu lakukan testing dengan 5000 request dan 150 request/second.
+
+- Modifikasi node irulan ``nano /etc/bind/dune/harkonen.it10.com`` sebagai berikut
+```
+;
+; BIND data file for local loopback interface
+;
+$TTL	604800
+@   	IN  	SOA 	harkonen.it10.com. root.harkonen.it10.com. (
+                          	2     	; Serial
+                     	604800     	; Refresh
+                      	86400     	; Retry
+                    	2419200     	; Expire
+                     	604800 )   	; Negative Cache TTL
+;
+@   	IN  	NS  	harkonen.it10.com.
+@   	IN  	A   	192.238.4.2	; IP Stilgar load bal 
+www 	IN  	CNAME   harkonen.it10.com.
+```
+
+dan pada ``nano /etc/bind/dune/atreides.it10.com``
+
+```
+;
+; BIND data file for local loopback interface
+;
+$TTL	604800
+@   	IN  	SOA 	atreides.it10.com. root.atreides.it10.com. (
+                          	2     	; Serial
+                     	604800     	; Refresh
+                      	86400     	; Retry
+                    	2419200     	; Expire
+                     	604800 )   	; Negative Cache TTL
+;
+@   	IN  	NS  	atreides.it10.com.
+@   	IN  	A   	192.238.4.2 	; IP Stilgar load bal
+www 	IN  	CNAME   atreides.it10.com.
+```
+- Selanjutnya, pada node *stilgar*
+```
+echo ' upstream worker {
+    server 192.238.1.1;
+    server 192.238.1.2;
+    server 192.238.1.3;
+}
+
+server {
+    listen 80;
+    server_name harkonen.it10.com www.harkonen.it10.com;
+
+    root /var/www/html;
+
+    index index.html index.htm index.nginx-debian.html;
+
+    server_name _;
+
+    location / {
+        proxy_pass http://worker;
+    }
+} ' > /etc/nginx/sites-available/lb-stilgar
+
+ln -s /etc/nginx/sites-available/lb-stilgar /etc/nginx/sites-enabled
+
+rm /etc/nginx/sites-enabled/default
+
+service nginx restart
+
+service php7.3-fpm restart
+```
+
+- selanjutnya, kita cek pada salah satu client untuk melakukan testing dengan 5000 request dan 150 concurrent
+``ab -n 5000 -c 150 http://www.harkonen.it10.com/``
+![alt text](pict/cekab.png)
+![alt text](pict/cekab2.png)
+
+# No 8.
+Karena diminta untuk menuliskan peta tercepat menuju spice, buatlah analisis hasil testing dengan 500 request dan 50 request/second masing-masing algoritma Load Balancer dengan ketentuan sebagai berikut:
+a. Nama Algoritma Load Balancer
+b. Report hasil testing pada Apache Benchmark
+c. Grafik request per second untuk masing masing algoritma. 
+d. Analisis (8)
+
+Pada node Stilgar, ganti konfigurasi load balancer di ``/etc/nginx/conf.d/load_balancer.conf`` sesuai algoritma yang diinginkan.
+
+di sini menggunakan algoritma ``Least Connected``:
+```
+upstream backend {
+    least_conn;
+    server 192.238.1.8;
+    server 192.238.1.9;
+    server 192.238.1.10;
+}
+```
+
+Melakukan testing dengan Apache Benchmark: ``ab -n 500 -c 50 http://192.238.0.5/``
+
+# No 9.
+Dengan menggunakan algoritma Least-Connection, lakukan testing dengan menggunakan 3 worker, 2 worker, dan 1 worker sebanyak 1000 request dengan 10 request/second, kemudian tambahkan grafiknya pada peta. (9)
+
+Pada node Stilgar, ganti konfigurasi load balancer di ``/etc/nginx/conf.d/load_balancer.conf`` menjadi:
+```
+upstream backend {
+    least_conn;
+    server 192.238.1.8;
+    server 192.238.1.9;
+    server 192.238.1.10;
+}
+```
+
+- Melakukan testing:
+``ab -n 500 -c 50 http://www.harkonen.it10.com/``
+
+dengan ``1 worker``
+![alt text](<pict/1 worker.png>)
+
+dengan ``2 worker``
+![alt text](pict/2worker.png)
+
+dengan ``3 worker``
+![alt text](pict/3worker.png)
+
+# No 10.
+Selanjutnya coba tambahkan keamanan dengan konfigurasi autentikasi di LB dengan dengan kombinasi username: “secmart” dan password: “kcksyyy”, dengan yyy merupakan kode kelompok. Terakhir simpan file “htpasswd” nya di /etc/nginx/supersecret/ (10)
+
+`` mkdir /etc/nginx/supersecret ``
+
+`` htpasswd -c /etc/nginx/supersecret/htpasswd secmart``
+
+``passwd kcksyyy``
+
+Selanjutnya, pada /etc/nginx/sites-available/lb_php tambahkan script berikut:
+
+```
+echo ' upstream worker {
+    server 192.238.1.1;
+    server 192.238.1.2;
+    server 192.238.1.3;
+}
+
+server {
+    listen 80;
+    server_name harkonen.it10.com www.harkonen.it10.com;
+
+    root /var/www/html;
+
+    index index.html index.htm index.nginx-debian.html;
+
+    server_name _;
+
+    location / {
+         proxy_pass http://worker;
+        auth_basic "Restricted Content";
+        auth_basic_user_file /etc/nginx/supersecret/htpasswd;
+    }
+} ' > /etc/nginx/sites-available/lb-stilgar
+
+
+ln -s /etc/nginx/sites-available/lb-stilgar /etc/nginx/sites-enabled
+cek
+
+lynx http://www.harkonen.it10.com/
+```
+![alt text](pict/no10.png)
+![alt text](pict/10.png)
+
+# No 11. 
+Lalu buat untuk setiap request yang mengandung /dune akan di proxy passing menuju halaman https://www.dunemovie.com.au/. (11) hint: (proxy_pass)
+
+Pada node Stilgar, tambahkan script berikut:
+
+```
+echo 'upstream worker {
+    server 192.238.1.1;
+    server 192.238.1.2;
+    server 192.238.1.3;
+}
+
+server {
+    listen 80;
+    server_name harkonen.it10.com www.harkonen.it10.com;
+
+    root /var/www/html;
+    
+    index index.html index.htm index.nginx-debian.html;
+
+    location / {
+    	auth_basic "Restricted Content";
+    	auth_basic_user_file /etc/nginx/supersecret/htpasswd;
+    	proxy_pass http://worker;
+    }
+
+    location /dune/ {
+   	 proxy_pass https://www.dunemovie.com.au/;
+   	 proxy_set_header Host www.dunemovie.com.au;
+   	 proxy_set_header X-Real-IP $remote_addr;
+   	 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   	 proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}' > /etc/nginx/sites-available/lb-stilgar
+```
+
+Setelah itu, cek dengan ``lynx www.harkonen.it10.com/dune/``
+![alt text](pict/no11.png)
+
+# No 12. 
+Selanjutnya LB ini hanya boleh diakses oleh client dengan IP [Prefix IP].1.37, [Prefix IP].1.67, [Prefix IP].2.203, dan [Prefix IP].2.207. (12) hint: (fixed in dulu clientnya)
+
+Mengonfigurasi Pembatasan Akses pada Load Balancer (Stilgar), maka
+Pada node Stilgar, tambahkan script berikut:
+```
+upstream worker {
+	server 192.238.1.1;
+	server 192.238.1.2;
+	server 192.238.1.3;
+}
+
+server {
+	listen 80;
+	server_name harkonen.it10.com www.harkonen.it10.com;
+
+	root /var/www/html;
+	index index.html index.htm index.nginx-debian.html;
+
+	location / {
+    	auth_basic "Restricted Content";
+    	auth_basic_user_file /etc/nginx/supersecret/htpasswd;
+    	allow 192.238.1.37;
+    	allow 192.238.1.67;
+    	allow 192.238.2.203;
+    	allow 192.238.2.207;
+    	deny all;
+    	proxy_pass http://worker;
+	}
+
+	location /dune/ {
+    	proxy_pass https://www.dunemovie.com.au/;
+    	proxy_set_header Host www.dunemovie.com.au;
+    	proxy_set_header X-Real-IP $remote_addr;
+    	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    	proxy_set_header X-Forwarded-Proto $scheme;
+	}
+} ' > /etc/nginx/sites-available/lb-stilgar
+
+rm  /etc/nginx/sites-enabled/lb-stilgar
+
+
+ln -s /etc/nginx/sites-available/lb-stilgar /etc/nginx/sites-enabled
+```
+
+Lakukan cek menggunakan ``lynx www.harkonen.it10.com``
+![alt text](pict/no12.png)
+
+# No 13. 
+Tidak mau kalah dalam perburuan spice, House atreides juga mengatur para pekerja di atreides.yyy.com.
+Semua data yang diperlukan, diatur pada Chani dan harus dapat diakses oleh Leto, Duncan, dan Jessica. (13)
+
+Pada node chani agar data yg diperlukan dapat diakses oleh leto, duncan, dan jessica maka edit script sebagai berikut pada ``nano /etc/mysql/my.cnf``
+
+```
+# Options affecting the MySQL server (mysqld)
+[mysqld]
+skip-networking=0
+skip-bind-address
+```
+Lalu pada ``nano /etc/mysql/mariadb.conf.d/50-server.cnf``
+tambahkan berikut ini: ``bind_adress = 0.0.0.0``
+
+jalankan ``service mysql restart``
+
+Selanjutnya masih pada node chani, masuk ke mysql dengan ``mysql -u root -p``
+
+dengan password: ``it10``
+
+```
+-- Create the user with access from any host
+CREATE USER 'kelompokit10'@'%' IDENTIFIED BY 'kelompokit10';
+
+-- Create the user with access from localhost
+CREATE USER 'kelompokit10'@'localhost' IDENTIFIED BY 'kelompokit10';
+
+-- Create the database
+CREATE DATABASE dbkelompoka10;
+
+-- Grant all privileges on the specific database to the user for any host
+GRANT ALL PRIVILEGES ON dbkelompoka10.* TO 'kelompokit10'@'%';
+
+-- Grant all privileges on the specific database to the user for localhost
+GRANT ALL PRIVILEGES ON dbkelompoka10.* TO 'kelompokit10'@'localhost';
+
+-- Apply the changes
+FLUSH PRIVILEGES;
+```
+
+Selanjutnya cek pada worker laravel:
+```
+mariadb --host=192.238.4.1 --port=3306 --user='kelompokit10' --password='kelompokit10' -e "SHOW DATABASES;" dbkelompoka10
+
+
+mariadb --host=192.238.4.1 --port=3306 --user='kelompokit10' --password='kelompokit10' -e "SHOW TABLES;" dbkelompoka10
+
+
+mariadb --host=192.238.4.1 --port=3306 --user='kelompokit10' --password='kelompokit10' --verbose --execute="SELECT * FROM users;" dbkelompoka10
+```
+![alt text](pict/no13.png)
+![alt text](pict/masih13.png)
+
+# No 14.
+Leto, Duncan, dan Jessica memiliki atreides Channel sesuai dengan quest guide berikut. Jangan lupa melakukan instalasi PHP8.0 dan Composer (14)
+
+- Pada node stilgar, edit script pada ``nano /etc/nginx/sites-available/laravel-worker`` dengan berikut ini: 
+
+```
+# Combined upstream configuration
+upstream worker {
+	# Workers for harkonen.it10.com
+	server 192.238.1.1;
+	server 192.238.1.2;
+	server 192.238.1.3;
+
+	# Workers for atreides.it10.com
+	server 192.238.2.1:8001;
+	server 192.238.2.2:8002;
+	server 192.238.2.3:8003;
+}
+
+# Server block for harkonen.it10.com
+server {
+	listen 80;
+	server_name harkonen.it10.com www.harkonen.it10.com;
+
+	root /var/www/html;
+	index index.html index.htm index.nginx-debian.html;
+
+	location / {
+    	auth_basic "Restricted Content";
+    	auth_basic_user_file /etc/nginx/supersecret/htpasswd;
+    	allow 192.238.1.37;
+    	allow 192.238.1.67;
+    	allow 192.238.2.203;
+    	allow 192.238.2.207;
+    	deny all;
+    	proxy_pass http://worker;
+	}
+
+	location /dune/ {
+    	proxy_pass https://www.dunemovie.com.au/;
+    	proxy_set_header Host www.dunemovie.com.au;
+    	proxy_set_header X-Real-IP $remote_addr;
+    	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    	proxy_set_header X-Forwarded-Proto $scheme;
+	}
+}
+
+# Server block for atreides.it10.com
+server {
+	listen 80;
+	server_name atreides.it10.com www.atreides.it10.com;
+
+	location / {
+    	proxy_pass http://worker;
+	}
+}
+
+
+ln -s /etc/nginx/sites-available/laravel-worker /etc/nginx/sites-enabled/laravel-worker
+```
+
+- Semuanya pada semua node laravel worker yaitu (dunca, jessica, dan leto)
+1. install composer: 
+```
+wget https://getcomposer.org/download/2.0.13/composer.phar
+
+chmod +x composer.phar
+
+mv composer.phar /usr/local/bin/composer
+```
+
+2. install git: ``apt-get install git -y``
+
+3. Lakukan clone: 
+```
+cd /var/www && git clone https://github.com/martuafernando/laravel-praktikum-jarkom
+
+cd /var/www/laravel-praktikum-jarkom && composer update
+```
+
+4. Lakukan konfigurasi sebagai berikut pada masing-masing worker:
+```
+cd /var/www/laravel-praktikum-jarkom && cp .env.example .env
+
+echo 'APP_NAME=Laravel
+APP_ENV=local
+APP_KEY=
+APP_DEBUG=true
+APP_URL=http://localhost
+
+LOG_CHANNEL=stack
+LOG_DEPRECATIONS_CHANNEL=null
+LOG_LEVEL=debug
+
+DB_CONNECTION=mysql
+DB_HOST=192.238.4.1
+DB_PORT=3306
+DB_DATABASE=dbkelompoka10
+DB_USERNAME=kelompokit10
+DB_PASSWORD=kelompokit10
+
+BROADCAST_DRIVER=log
+CACHE_DRIVER=file
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+
+MEMCACHED_HOST=127.0.0.1
+
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+MAIL_MAILER=smtp
+MAIL_HOST=mailpit
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=null
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="${APP_NAME}"
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=
+AWS_USE_PATH_STYLE_ENDPOINT=false
+
+PUSHER_APP_ID=
+PUSHER_APP_KEY=
+PUSHER_APP_SECRET=
+PUSHER_HOST=
+PUSHER_PORT=443
+PUSHER_SCHEME=https
+PUSHER_APP_CLUSTER=mt1
+
+VITE_PUSHER_APP_KEY="${PUSHER_APP_KEY}"
+VITE_PUSHER_HOST="${PUSHER_HOST}"
+VITE_PUSHER_PORT="${PUSHER_PORT}"
+VITE_PUSHER_SCHEME="${PUSHER_SCHEME}"
+VITE_PUSHER_APP_CLUSTER="${PUSHER_APP_CLUSTER}"' > /var/www/laravel-praktikum-jarkom/.env
+```
+Selanjutnya, 
+
+```
+cd /var/www/laravel-praktikum-jarkom && php artisan key:generate
+cd /var/www/laravel-praktikum-jarkom && php artisan config:cache
+cd /var/www/laravel-praktikum-jarkom && php artisan migrate
+cd /var/www/laravel-praktikum-jarkom && php artisan db:seed
+cd /var/www/laravel-praktikum-jarkom && php artisan storage:link
+cd /var/www/laravel-praktikum-jarkom && php artisan jwt:secret
+cd /var/www/laravel-praktikum-jarkom && php artisan config:clear
+
+chown -R www-data.www-data /var/www/laravel-praktikum-jarkom/storage
+```
+
+5. Lakukan config sebagai berikut pada ``nano /etc/nginx/sites-available/laravel-worker``
+
+```
+server {
+	listen 8001; # Leto
+
+	root /var/www/laravel-praktikum-jarkom/public;
+
+	index index.php index.html index.htm;
+	server_name _;
+
+	location / {
+    	try_files $uri $uri/ /index.php?$query_string;
+	}
+
+	# pass PHP scripts to FastCGI server
+	location ~ \.php$ {
+    	include snippets/fastcgi-php.conf;
+    	fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
+	}
+
+	location ~ /\.ht {
+    	deny all;
+	}
+
+	error_log /var/log/nginx/implementasi_error.log;
+	access_log /var/log/nginx/implementasi_access.log;
+}
+
+server {
+	listen 8002; # Duncan
+
+	root /var/www/laravel-praktikum-jarkom/public;
+
+	index index.php index.html index.htm;
+	server_name _;
+
+	location / {
+    	try_files $uri $uri/ /index.php?$query_string;
+	}
+
+	# pass PHP scripts to FastCGI server
+	location ~ \.php$ {
+    	include snippets/fastcgi-php.conf;
+    	fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
+	}
+
+	location ~ /\.ht {
+    	deny all;
+	}
+
+	error_log /var/log/nginx/implementasi_error.log;
+	access_log /var/log/nginx/implementasi_access.log;
+}
+
+server {
+	listen 8003; # Jessica
+
+	root /var/www/laravel-praktikum-jarkom/public;
+
+	index index.php index.html index.htm;
+	server_name _;
+
+	location / {
+    	try_files $uri $uri/ /index.php?$query_string;
+	}
+
+	# pass PHP scripts to FastCGI server
+	location ~ \.php$ {
+    	include snippets/fastcgi-php.conf;
+    	fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
+	}
+
+	location ~ /\.ht {
+    	deny all;
+	}
+
+	error_log /var/log/nginx/implementasi_error.log;
+	access_log /var/log/nginx/implementasi_access.log;
+}
+
+service nginx restart
+service php8.0-fpm restart
+
+ln -s /etc/nginx/sites-available/laravel-worker /etc/nginx/sites-enabled/
+
+rm /etc/nginx/sites-enabled/default
+```
+
+6.  Cek dengan: ``lynx localhost:8001``
+![alt text](pict/cek16.png)
+
+# No 15. 
+atreides Channel memiliki beberapa endpoint yang harus ditesting sebanyak 100 request dengan 10 request/second. Tambahkan response dan hasil testing pada peta.
+POST /auth/register (15)
+
+Pada node client tambahkan script berikut:
+```
+echo '
+{
+  "username": "kelompokit10",
+  "password": "kelompokit10"
+}' > register.json
+```
+
+Selanjutnya, cek dengan: ``ab -n 100 -c 10 -p register.json -T application/json http://192.238.2.2:8002/api/auth/register``
+![alt text](pict/cek15.png)
+Pada gambar tersebut terlihat bahwa terdapat 49 failed request atau terdapat request yang gagal sebanyak 49.
+
+![alt text](pict/req1.png)
+Selanjutnya, untuk request yang diterma hanyak terdapat 1 req. 
+
+
+# No 16.
+POST /auth/login (16)
+
+Pada Node Client, tambahkan script berikut ini:
+```
+echo '
+{
+  "username": "kelompokit10",
+  "password": "kelompokit10"
+}' > login.json
+```
+ Setelah itu, cek dengan: ``ab -n 100 -c 10 -p login.json -T application/json http://192.238.2.2:8002/api/auth/login``
+
+![alt text](pict/hasilcek16.png)
+Terlihat pada gambar tersebut bahwa request yang gagal telah berkurang dari yang sebelumnya 49 menjadi 46 req. (Kemungkinan karena performa CPU ataupun Worker)
+
+# No 17.
+GET /me (17)
+
+- Pada node client yaitu (Dmitiri dan Paul)
+ Lakukan cek token terlebih dahulu, 
+ ``curl -X POST -H "Content-Type: application/json" -d @login.json http://192.238.2.2:8002/api/auth/login > login_output.txt``
+
+ ``token=$(cat login_output.txt | jq -r '.token')``
+
+tes juga dengan: ``ab -n 100 -c 10 -H "Authorization: Bearer $token" http://192.238.2.2:8002/api/me``
+![alt text](pict/no17.png)
+
+# No 18.
+Untuk memastikan ketiganya bekerja sama secara adil untuk mengatur atreides Channel maka implementasikan Proxy Bind pada Stilgar untuk mengaitkan IP dari Leto, Duncan, dan Jessica. (18)
+
+# No 19.
+Untuk meningkatkan performa dari Worker, coba implementasikan PHP-FPM pada Leto, Duncan, dan Jessica. Untuk testing kinerja naikkan 
+- pm.max_children
+- pm.start_servers
+- pm.min_spare_servers
+- pm.max_spare_servers
+sebanyak tiga percobaan dan lakukan testing sebanyak 100 request dengan 10 request/second kemudian berikan hasil analisisnya pada PDF.(19)
+
+# No 20.
+Nampaknya hanya menggunakan PHP-FPM tidak cukup untuk meningkatkan performa dari worker maka implementasikan Least-Conn pada Stilgar. Untuk testing kinerja dari worker tersebut dilakukan sebanyak 100 request dengan 10 request/second. (20)
